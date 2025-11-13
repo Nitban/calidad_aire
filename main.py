@@ -13,21 +13,36 @@ from firebase_admin import credentials, db
 # Crear la app Flask
 app = Flask(__name__)
 
-# Leer las variables de entorno
-cred_json = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+# ------------------------------
+# 🔐 CREDENCIALES FIREBASE (seguras para Render)
+# ------------------------------
+
+project_id = os.getenv("FIREBASE_PROJECT_ID")
+client_email = os.getenv("FIREBASE_CLIENT_EMAIL")
+private_key = os.getenv("FIREBASE_PRIVATE_KEY")
 database_url = os.getenv("DATABASE_URL")
 
-if not cred_json:
-    raise ValueError("❌ No se encontró la variable GOOGLE_APPLICATION_CREDENTIALS_JSON")
+if not all([project_id, client_email, private_key, database_url]):
+    raise ValueError("❌ Faltan variables de entorno de Firebase")
 
-if not database_url:
-    raise ValueError("❌ No se encontró la variable DATABASE_URL")
+# Render elimina saltos de línea, los restauramos
+private_key = private_key.replace("\\n", "\n")
 
-# Convertir el JSON del service account
-cred_dict = json.loads(cred_json)
+cred_dict = {
+    "type": "service_account",
+    "project_id": project_id,
+    "private_key_id": "manual-config",
+    "private_key": private_key,
+    "client_email": client_email,
+    "client_id": "manual",
+    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+    "token_uri": "https://oauth2.googleapis.com/token",
+    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+    "client_x509_cert_url": f"https://www.googleapis.com/robot/v1/metadata/x509/{client_email.replace('@', '%40')}"
+}
+
 cred = credentials.Certificate(cred_dict)
 
-# Inicializar Firebase
 if not firebase_admin._apps:
     firebase_admin.initialize_app(cred, {"databaseURL": database_url})
 
@@ -128,7 +143,8 @@ def sync_firebase():
         })
 
         return jsonify({
-            "mensaje": "Predicción guardada en Firebase",
+            "mensaje": "✅ Predicción guardada en Firebase",
+            "lectura_id": last_key,
             "prediccion": prediccion
         })
 
@@ -138,7 +154,5 @@ def sync_firebase():
 # ------------------------------
 # 🚀 ARRANQUE DE LA APP (Render)
 # ------------------------------
-# Render usa gunicorn, así que no necesitamos app.run()
-# Solo aseguramos que app exista para gunicorn
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
