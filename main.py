@@ -10,37 +10,27 @@ from firebase_admin import credentials, db
 # 🔧 CONFIGURACIÓN INICIAL
 # ------------------------------
 
-# Crear la app Flask
 app = Flask(__name__)
 
 # ------------------------------
-# 🔐 CREDENCIALES FIREBASE (seguras para Render)
+# 🔐 LEER JSON COMPLETO DESDE VARIABLE
 # ------------------------------
 
-project_id = os.getenv("FIREBASE_PROJECT_ID")
-client_email = os.getenv("FIREBASE_CLIENT_EMAIL")
-private_key = os.getenv("FIREBASE_PRIVATE_KEY")
+cred_json = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
 database_url = os.getenv("DATABASE_URL")
 
-if not all([project_id, client_email, private_key, database_url]):
-    raise ValueError("❌ Faltan variables de entorno de Firebase")
+if not cred_json:
+    raise ValueError("❌ No se encontró GOOGLE_APPLICATION_CREDENTIALS_JSON en Render")
 
-# Render elimina saltos de línea, los restauramos
-private_key = private_key.replace("\\n", "\n")
+if not database_url:
+    raise ValueError("❌ No se encontró DATABASE_URL en Render")
 
-cred_dict = {
-    "type": "service_account",
-    "project_id": project_id,
-    "private_key_id": "manual-config",
-    "private_key": private_key,
-    "client_email": client_email,
-    "client_id": "manual",
-    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-    "token_uri": "https://oauth2.googleapis.com/token",
-    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-    "client_x509_cert_url": f"https://www.googleapis.com/robot/v1/metadata/x509/{client_email.replace('@', '%40')}"
-}
+# 🔥 Render destruye saltos de línea, los restauramos
+# Aquí convertimos \\n → \n solo dentro de private_key
+cred_dict = json.loads(cred_json)
+cred_dict["private_key"] = cred_dict["private_key"].replace("\\n", "\n")
 
+# Inicializar Firebase Admin
 cred = credentials.Certificate(cred_dict)
 
 if not firebase_admin._apps:
@@ -71,7 +61,7 @@ def home():
     })
 
 # ------------------------------
-# 🔍 PREDICCIÓN MANUAL (POST)
+# 🔍 PREDICCIÓN MANUAL
 # ------------------------------
 @app.route("/predict", methods=["POST"])
 def predict():
@@ -83,7 +73,7 @@ def predict():
         required = ["gas", "humedad", "luz", "polvo", "temperatura"]
 
         if not all(k in data for k in required):
-            return jsonify({"error": f"Faltan campos. Requeridos: {required}"}), 400
+            return jsonify({"error": f"Faltan campos: {required}"}), 400
 
         features = np.array([[
             data["gas"],
@@ -104,7 +94,7 @@ def predict():
         return jsonify({"error": str(e)}), 500
 
 # ------------------------------
-# ☁️ SINCRONIZAR CON FIREBASE
+# ☁️ SINCRONIZAR ÚLTIMA LECTURA DE FIREBASE
 # ------------------------------
 @app.route("/sync-firebase", methods=["GET"])
 def sync_firebase():
@@ -121,7 +111,6 @@ def sync_firebase():
         last_key = list(data.keys())[-1]
         lectura = data[last_key]
 
-        # Validar campos esperados
         required = ["gas", "humedad", "luz", "polvo", "temperatura"]
         if not all(k in lectura for k in required):
             return jsonify({"error": "Lectura incompleta"}), 400
@@ -136,7 +125,6 @@ def sync_firebase():
 
         prediccion = model.predict(features)[0]
 
-        # Guardar resultado en /predicciones
         db.reference("/predicciones").push({
             "lectura_id": last_key,
             "prediccion": prediccion
@@ -152,7 +140,7 @@ def sync_firebase():
         return jsonify({"error": str(e)}), 500
 
 # ------------------------------
-# 🚀 ARRANQUE DE LA APP (Render)
+# 🚀 SERVIDOR (Render)
 # ------------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
