@@ -1,2 +1,76 @@
-"serviceAccountKey.json" 
-"serviceAccountKey.json" 
+# -------------------------------------
+# 🐍 Python
+# -------------------------------------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+
+# Entorno virtual
+venv/
+.venv/
+env/
+ENV/
+
+# Archivos de configuración
+*.env
+.env.*
+*.ini
+
+# -------------------------------------
+# 🔥 Firebase / Google
+# -------------------------------------
+serviceAccountKey.json
+firebase_credentials.json
+google-credentials.json
+
+# Evitar subir llaves por accidente
+*key.json
+*.pem
+
+# -------------------------------------
+# 🤖 Modelo de Machine Learning
+# (subido fuera de GitHub)
+# -------------------------------------
+*.pkl
+modelos/
+model/
+*.joblib
+
+# -------------------------------------
+# 🧪 Logs y temporales
+# -------------------------------------
+*.log
+*.tmp
+*.temp
+*.out
+
+# Archivos de compilación
+build/
+dist/
+*.egg-info/
+
+# -------------------------------------
+# 💻 IDEs
+# -------------------------------------
+
+# VSCode
+.vscode/
+
+# PyCharm
+.idea/
+
+# -------------------------------------
+# 🕸️ Render
+# -------------------------------------
+# No guardar credenciales en GitHub
+GOOGLE_APPLICATION_CREDENTIALS_JSON
+DATABASE_URL
+
+# -------------------------------------
+# 🔧 Sistema
+# -------------------------------------
+.DS_Store
+Thumbs.db
+

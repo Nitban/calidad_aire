@@ -2,6 +2,7 @@ import os
 import json
 import joblib
 import numpy as np
+from datetime import datetime
 from flask import Flask, request, jsonify
 import firebase_admin
 from firebase_admin import credentials, db
@@ -25,8 +26,7 @@ if not cred_json:
 if not database_url:
     raise ValueError("❌ No se encontró DATABASE_URL en Render")
 
-# 🔥 Render destruye saltos de línea, los restauramos
-# Aquí convertimos \\n → \n solo dentro de private_key
+# Restaurar saltos de línea solo en private_key
 cred_dict = json.loads(cred_json)
 cred_dict["private_key"] = cred_dict["private_key"].replace("\\n", "\n")
 
@@ -56,7 +56,7 @@ def home():
         "message": "API de Calidad del Aire activa 🌎",
         "endpoints": {
             "/predict": "POST → predicción con datos de sensores",
-            "/sync-firebase": "GET → clasifica los últimos datos de Firebase"
+            "/sync-firebase": "GET → clasifica y guarda la última lectura de Firebase"
         }
     })
 
@@ -75,20 +75,17 @@ def predict():
         if not all(k in data for k in required):
             return jsonify({"error": f"Faltan campos: {required}"}), 400
 
-        features = np.array([[
-            data["gas"],
-            data["humedad"],
-            data["luz"],
-            data["polvo"],
-            data["temperatura"]
-        ]])
-
+        features = np.array([[data[k] for k in required]])
         prediction = model.predict(features)[0]
 
-        return jsonify({
+        # Crear resultado con timestamp
+        result = {
             "input": data,
-            "prediccion": prediction
-        })
+            "prediccion": prediction,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+        return jsonify(result)
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -108,6 +105,7 @@ def sync_firebase():
         if not data:
             return jsonify({"mensaje": "No hay lecturas disponibles en Firebase"})
 
+        # Última clave registrada
         last_key = list(data.keys())[-1]
         lectura = data[last_key]
 
@@ -115,25 +113,23 @@ def sync_firebase():
         if not all(k in lectura for k in required):
             return jsonify({"error": "Lectura incompleta"}), 400
 
-        features = np.array([[
-            lectura["gas"],
-            lectura["humedad"],
-            lectura["luz"],
-            lectura["polvo"],
-            lectura["temperatura"]
-        ]])
-
+        features = np.array([[lectura[k] for k in required]])
         prediccion = model.predict(features)[0]
 
-        db.reference("/predicciones").push({
+        # Crear registro completo
+        registro = {
             "lectura_id": last_key,
-            "prediccion": prediccion
-        })
+            "datos": lectura,
+            "prediccion": prediccion,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+        # Guardar en Firebase
+        db.reference("/predicciones").push(registro)
 
         return jsonify({
             "mensaje": "✅ Predicción guardada en Firebase",
-            "lectura_id": last_key,
-            "prediccion": prediccion
+            "registro": registro
         })
 
     except Exception as e:
