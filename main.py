@@ -99,42 +99,58 @@ def sync_firebase():
         if not model:
             return jsonify({"error": "Modelo no cargado"}), 500
 
-        ref = db.reference("/lecturas")
-        data = ref.get()
+        ref_lecturas = db.reference("/lecturas")
+        ref_preds = db.reference("/predicciones")
 
-        if not data:
-            return jsonify({"mensaje": "No hay lecturas disponibles en Firebase"})
+        lecturas = ref_lecturas.get() or {}
+        predicciones = ref_preds.get() or {}
 
-        # Última clave registrada
-        last_key = list(data.keys())[-1]
-        lectura = data[last_key]
+        # Identificar lecturas ya procesadas
+        procesadas = {p["lectura_id"] for p in predicciones.values() if "lectura_id" in p}
 
-        required = ["gas", "humedad", "luz", "polvo", "temperatura"]
-        if not all(k in lectura for k in required):
-            return jsonify({"error": "Lectura incompleta"}), 400
+        # Fecha de hoy (UTC)
+        hoy = datetime.utcnow().strftime("%Y-%m-%d")
 
-        features = np.array([[lectura[k] for k in required]])
-        prediccion = model.predict(features)[0]
+        generadas = []
 
-        # Crear registro completo
-        registro = {
-            "lectura_id": last_key,
-            "datos": lectura,
-            "prediccion": prediccion,
-            "timestamp": datetime.utcnow().isoformat()
-        }
+        for key, lectura in lecturas.items():
 
-        # Guardar en Firebase
-        db.reference("/predicciones").push(registro)
+            # Debe tener fecha
+            if "fecha" not in lectura:
+                continue
+
+            if not lectura["fecha"].startswith(hoy):
+                continue  # No es de hoy
+
+            if key in procesadas:
+                continue  # Ya clasificada
+
+            required = ["gas", "humedad", "luz", "polvo", "temperatura"]
+            if not all(k in lectura for k in required):
+                continue
+
+            # Realizar predicción
+            features = np.array([[lectura[k] for k in required]])
+            prediccion = model.predict(features)[0]
+
+            registro = {
+                "lectura_id": key,
+                "fecha": lectura["fecha"],
+                "datos": lectura,
+                "prediccion": prediccion,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+
+            ref_preds.push(registro)
+            generadas.append(registro)
 
         return jsonify({
-            "mensaje": "✅ Predicción guardada en Firebase",
-            "registro": registro
+            "mensaje": f"Predicciones generadas: {len(generadas)}",
+            "registros": generadas
         })
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 # ------------------------------
 # 🚀 SERVIDOR (Render)
 # ------------------------------
