@@ -13,8 +13,10 @@ from firebase_admin import credentials, db
 # ------------------------------
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "https://calidad-aire-6685f.web.app"}})  # <-- AÑADIDO
-# CORS(app)  # <-- alternativa abierta temporal
+
+CORS(app,
+     resources={r"/*": {"origins": "*"}},
+     supports_credentials=True)
 
 # ------------------------------
 # 🔐 LEER JSON COMPLETO DESDE VARIABLE
