@@ -4,6 +4,7 @@ import joblib
 import numpy as np
 from datetime import datetime
 from flask import Flask, request, jsonify
+from flask_cors import CORS   # <-- AÑADIDO
 import firebase_admin
 from firebase_admin import credentials, db
 
@@ -12,6 +13,8 @@ from firebase_admin import credentials, db
 # ------------------------------
 
 app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": "https://calidad-aire-6685f.web.app"}})  # <-- AÑADIDO
+# CORS(app)  # <-- alternativa abierta temporal
 
 # ------------------------------
 # 🔐 LEER JSON COMPLETO DESDE VARIABLE
@@ -26,11 +29,9 @@ if not cred_json:
 if not database_url:
     raise ValueError("❌ No se encontró DATABASE_URL en Render")
 
-# Restaurar saltos de línea solo en private_key
 cred_dict = json.loads(cred_json)
 cred_dict["private_key"] = cred_dict["private_key"].replace("\\n", "\n")
 
-# Inicializar Firebase Admin
 cred = credentials.Certificate(cred_dict)
 
 if not firebase_admin._apps:
@@ -78,7 +79,6 @@ def predict():
         features = np.array([[data[k] for k in required]])
         prediction = model.predict(features)[0]
 
-        # Crear resultado con timestamp
         result = {
             "input": data,
             "prediccion": prediction,
@@ -91,7 +91,7 @@ def predict():
         return jsonify({"error": str(e)}), 500
 
 # ------------------------------
-# ☁️ SINCRONIZAR ÚLTIMA LECTURA DE FIREBASE
+# ☁️ SINCRONIZAR LECTURAS
 # ------------------------------
 @app.route("/sync-firebase", methods=["GET"])
 def sync_firebase():
@@ -105,31 +105,27 @@ def sync_firebase():
         lecturas = ref_lecturas.get() or {}
         predicciones = ref_preds.get() or {}
 
-        # Identificar lecturas ya procesadas
         procesadas = {p["lectura_id"] for p in predicciones.values() if "lectura_id" in p}
 
-        # Fecha de hoy (UTC)
         hoy = datetime.utcnow().strftime("%Y-%m-%d")
 
         generadas = []
 
         for key, lectura in lecturas.items():
 
-            # Debe tener fecha
             if "fecha" not in lectura:
                 continue
 
             if not lectura["fecha"].startswith(hoy):
-                continue  # No es de hoy
+                continue
 
             if key in procesadas:
-                continue  # Ya clasificada
+                continue
 
             required = ["gas", "humedad", "luz", "polvo", "temperatura"]
             if not all(k in lectura for k in required):
                 continue
 
-            # Realizar predicción
             features = np.array([[lectura[k] for k in required]])
             prediccion = model.predict(features)[0]
 
@@ -151,8 +147,10 @@ def sync_firebase():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 # ------------------------------
-# 🚀 SERVIDOR (Render)
+# 🚀 SERVIDOR
 # ------------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
